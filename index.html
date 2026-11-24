@@ -332,7 +332,7 @@ function calc(){
   let kind=$('kind').value;if(kind==='auto')kind=np?'notice':(hp||/아파트|다세대|연립|단독주택|다가구|다중주택/.test(S.use||''))?'house':(S.title&&S.title.mgmBldrgstPk)?'split':'land';
   const f=['bBase','bStr','bUse','bLoc','bRes'].map(id=>num($(id).value));const adj=num($('bAdj').value)??1;
   const useAdj=pu==='gift'||pu==='inh';
-  const bldOk=f.every(v=>v!=null)&&area;const bld=bldOk?f.reduce((a,v)=>a*v,1)*(useAdj?adj:1)*area:null;
+  const bldOk=f.every(v=>v!=null)&&area;const perM=bldOk?Math.floor(f.reduce((a,v)=>a*v,1)*(useAdj?adj:1)/1000)*1000:null;const bld=bldOk?perM*area:null;
   const land=lpv&&ls?lpv*ls:null;
   let std=null;
   add('대상',esc(S.label)+(S.ho?' '+esc(S.ho)+'호':''),esc(S.use)+' / '+esc(S.strct),'건축물대장(국토교통부 건축HUB)');
@@ -349,7 +349,7 @@ function calc(){
   }else{
     add('기준시가 구분','토지 + 건물 별도','','상증법 §61①1·2 / 소득세법 §99①1가·나');
     add('토지분','공시지가 '+fmt(lpv)+'원/㎡('+esc($('lpYear').value||'?')+') × 대지권 '+fmt(ls)+'㎡',won(land),'개별공시지가는 평가기준일 현재 고시된 것(상증법 시행령 §50⑥)');
-    add('건물분',f.map(fmt).join(' × ')+(useAdj?' × 조정률 '+fmt(adj):'')+' × '+fmt(area)+'㎡',won(bld),'국세청 건물 기준시가 계산방법 고시 §5~§11 (조정률은 상속·증여만, §5②)');
+    add('건물분','㎡당 '+f.map(fmt).join(' × ')+(useAdj?' × 조정률 '+fmt(adj):'')+' = '+(perM!=null?perM.toLocaleString('ko-KR')+'원(1,000원 미만 버림)':'-')+' × 면적 '+fmt(area)+'㎡',won(bld),'국세청 건물 기준시가 계산방법 고시 §5(면적은 연면적, 집합건물은 전용+공용) ~ §11. 조정률은 상속·증여만(§5②)');
     std=land!=null&&bld!=null?land+bld:null;add('기준시가 합계','토지분 + 건물분',won(std),'');
   }
   let concl=std,conclLabel='기준시가',conclNote='';
