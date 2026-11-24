@@ -143,6 +143,12 @@ pre{overflow-x:auto;font-size:12px;background:var(--bg);padding:10px;border-radi
     </fieldset>
   </section>
 
+  <section id="nedSec" class="hidden">
+    <h2>브이월드 상세 자료 (새 탭으로 열림)</h2>
+    <p class="note">토지 면적·지목·용도지역, 연도별 공시지가, 주택가격은 브이월드 국가중점 API에서 가져옵니다. 이 자료는 페이지 안으로 직접 불러올 수 없어 새 탭으로 엽니다. 연 결과에서 값을 확인해 위 입력칸에 넣으세요.</p>
+    <ul id="nedLinks"></ul>
+  </section>
+
   <section id="calcSec" class="hidden">
     <h2>계산 근거</h2>
     <div class="scroll"><table id="tbl-calc"><thead><tr><th>단계</th><th>계산식</th><th>금액·값</th><th>근거</th></tr></thead><tbody></tbody></table></div>
@@ -279,7 +285,8 @@ async function run(pnu,label){
   const u=S.use+' '+S.etcUse;
   $('rtType').value=!r.title.length?'land':/아파트/.test(u)?'apt':/오피스텔/.test(u)?'offi':/다세대|연립/.test(u)?'rh':/단독|다가구|다중주택/.test(u)?'sh':'nrg';
   const [a,b]=rangeFor($('purpose').value,$('baseDate').value);$('rtFrom').value=a;$('rtTo').value=b;
-  ['evalSec','calcSec','rtSec','detailSec','verdict','summary'].forEach(id=>$(id).classList.remove('hidden'));
+  nedLinks();
+  ['evalSec','nedSec','calcSec','rtSec','detailSec','verdict','summary'].forEach(id=>$(id).classList.remove('hidden'));
   purposeUi();calc();await runRt();
 }
 
@@ -304,6 +311,18 @@ async function runRt(){
   calc();
 }
 
+function nedLinks(){
+  if(!keyVw()){$('nedLinks').innerHTML='<li class="warn">브이월드 키가 없습니다.</li>';return}
+  const y=($('baseDate').value||'').slice(0,4)||String(new Date().getFullYear());
+  const b='https://api.vworld.kr/ned/data/';const k=vwBase();const pn='&pnu='+S.pnu+'&format=json&numOfRows=100&pageNo=1';
+  const dongQ=S.dong?'&dongNm='+encodeURIComponent(S.dong):'',hoQ=S.ho?'&hoNm='+encodeURIComponent(S.ho):'';
+  const L=[['link-landchar','토지특성 (면적·지목·용도지역·공시지가) '+y+'년',b+'getLandCharacteristics?stdrYear='+y+pn+k],
+    ['link-landchar-prev','토지특성 '+(y-1)+'년',b+'getLandCharacteristics?stdrYear='+(y-1)+pn+k],
+    ['link-landprice','개별공시지가 '+y+'년',b+'getIndvdLandPriceAttr?stdrYear='+y+pn+k],
+    ['link-apt','공동주택가격 '+y+'년',b+'getApartHousingPriceAttr?stdrYear='+y+pn+dongQ+hoQ+k],
+    ['link-house','개별주택가격 '+y+'년',b+'getIndvdHousingPriceAttr?stdrYear='+y+pn+k]];
+  $('nedLinks').innerHTML=L.map(([id,t,u])=>'<li><a id="'+id+'" href="'+esc(u)+'" target="_blank" rel="noopener noreferrer">'+esc(t)+'</a></li>').join('');
+}
 function purposeUi(){const pu=$('purpose').value;$('rentBox').classList.toggle('hidden',!(pu==='gift'||pu==='inh'));$('vatBox').classList.toggle('hidden',pu!=='vat')}
 
 function calc(){
