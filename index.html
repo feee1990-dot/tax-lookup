@@ -136,15 +136,15 @@ async function dataApi(op,p,extra){
   return all;
 }
 
-async function nedApi(op,pnu,extra){
-  const y=new Date().getFullYear();let last=[];
-  for(const yr of [y,y-1]){
-    const u='https://api.vworld.kr/ned/data/'+op+'?key='+encodeURIComponent(keyVw())+'&domain='+encodeURIComponent(location.origin)+'&pnu='+pnu+'&stdrYear='+yr+'&format=json&numOfRows=100&pageNo=1'+(extra||'');
-    const d=await jsonp(u);const box=d&&Object.values(d).find(v=>v&&v.field);
-    const f=box?(Array.isArray(box.field)?box.field:[box.field]):[];
-    if(f.length)return f;last=f;
-  }
-  return last;
+async function landPrice(pnu){
+  const u='https://api.vworld.kr/req/data?service=data&request=GetFeature&data=LP_PA_CBND_BUBUN&format=json&errorformat=json&geometry=false&size=10'
+    +'&key='+encodeURIComponent(keyVw())+'&domain='+encodeURIComponent(location.origin)+'&attrFilter=pnu:=:'+pnu;
+  const d=await jsonp(u);const r=d&&d.response;
+  if(!r)throw new Error('브이월드 응답 형식 이상');
+  if(r.status==='ERROR')throw new Error('브이월드 오류: '+(r.error&&(r.error.text||r.error.code)||''));
+  if(r.status==='NOT_FOUND')return [];
+  const fs=(r.result&&r.result.featureCollection&&r.result.featureCollection.features)||[];
+  return fs.map(f=>f.properties||{});
 }
 
 const L={platPlc:'대지위치',newPlatPlc:'도로명주소',bldNm:'건물명',dongNm:'동',hoNm:'호',flrNoNm:'층',exposPubuseGbCdNm:'전유/공용',mainPurpsCdNm:'주용도',etcPurps:'기타용도',strctCdNm:'구조',etcStrct:'기타구조',roofCdNm:'지붕',grndFlrCnt:'지상층수',ugrndFlrCnt:'지하층수',platArea:'대지면적㎡',archArea:'건축면적㎡',totArea:'연면적㎡',vlRatEstmTotArea:'용적률산정연면적㎡',bcRat:'건폐율%',vlRat:'용적률%',useAprDay:'사용승인일',pmsDay:'허가일',stcnsDay:'착공일',hhldCnt:'세대수',hoCnt:'호수',fmlyCnt:'가구수',regstrKindCdNm:'대장종류',regstrGbCdNm:'대장구분',area:'면적㎡',mgmBldrgstPk:'관리번호'};
@@ -167,9 +167,7 @@ async function run(pnu,label){
     recap:dataApi('getBrRecapTitleInfo',p),
     title:dataApi('getBrTitleInfo',p),
     expos:dataApi('getBrExposPubuseAreaInfo',p),
-    land:keyVw()?nedApi('getIndvdLandPriceAttr',pnu):Promise.reject(new Error('브이월드 키 없음')),
-    apt:keyVw()&&ho?nedApi('getApartHousingPriceAttr',pnu,(dong?'&dongNm='+encodeURIComponent(dong):'')+'&hoNm='+encodeURIComponent(ho)):Promise.resolve([]),
-    house:keyVw()&&!ho?nedApi('getIndvdHousingPriceAttr',pnu):Promise.resolve([])
+    land:keyVw()?landPrice(pnu):Promise.reject(new Error('브이월드 키 없음'))
   };
   const r={};
   for(const [k,pr] of Object.entries(tasks)){try{r[k]=await pr;log(k+': '+r[k].length+'건',r[k].length?'ok':'')}catch(e){r[k]=[];log(k+': '+e.message,'warn')}}
@@ -178,18 +176,19 @@ async function run(pnu,label){
   const own=ex.filter(x=>/전유/.test(x.exposPubuseGbCdNm||'')),pub=ex.filter(x=>/공용/.test(x.exposPubuseGbCdNm||''));
   const sOwn=own.reduce((a,x)=>a+(+x.area||0),0),sPub=pub.reduce((a,x)=>a+(+x.area||0),0);
   const t=r.title.find(x=>!dong||digits(x.dongNm)===digits(dong))||r.title[0]||{};
-  const lp=r.land[0]||{};const lpv=lp.pblntfPclnd||lp.pblntfPc||'';
-  const ap=r.apt[0]||r.house[0]||{};const apv=ap.pblntfPc||ap.housePc||'';
+  const lp=r.land[0]||{};const lpv=lp.jiga||'';const lpy=lp.gosi_year?lp.gosi_year+'.'+(lp.gosi_month||'01'):'';
+  const old=lp.gosi_year&&+lp.gosi_year<new Date().getFullYear();
   const sum=[['건물명',t.bldNm||'-'],['주용도',(own[0]&&own[0].mainPurpsCdNm)||t.mainPurpsCdNm||'-'],['구조',(own[0]&&own[0].strctCdNm)||t.strctCdNm||'-'],['사용승인일',fmtDay(t.useAprDay)],
     ['전유면적㎡',ho?n2(sOwn):'호 미입력'],['공용면적㎡',ho?n2(sPub):'호 미입력'],['합계면적㎡',ho?n2(sOwn+sPub):'호 미입력'],['대지면적㎡',t.platArea?n2(t.platArea):'-'],
-    ['개별공시지가 원/㎡',lpv?(+lpv).toLocaleString('ko-KR')+(lp.stdrYear?' ('+lp.stdrYear+')':''):'-'],['주택공시가격 원',apv?(+apv).toLocaleString('ko-KR'):'-']];
+    ['개별공시지가 원/㎡',lpv?(+lpv).toLocaleString('ko-KR'):'-'],['공시지가 기준',lpy?lpy+(old?' (올해 값 아님)':''):'-'],
+    ['토지 단가×대지면적 원',lpv&&t.platArea?Math.round(lpv*t.platArea).toLocaleString('ko-KR'):'-']];
   $('out').innerHTML='<div class="sum" id="summary">'+sum.map(([a,b])=>'<div><b>'+esc(a)+'</b><span>'+esc(b)+'</span></div>').join('')+'</div>'
     +'<p class="note">대지권 비율은 건축물대장에 없습니다(등기부 확인). 오피스텔·상업용 건물의 국세청 일괄고시 가격은 홈택스에서 확인합니다.</p>'
     +'<h2>표제부</h2>'+table(r.title,['dongNm','mainPurpsCdNm','etcPurps','strctCdNm','etcStrct','grndFlrCnt','ugrndFlrCnt','platArea','archArea','totArea','useAprDay','pmsDay','hhldCnt','hoCnt','regstrKindCdNm'],'tbl-title')
     +'<h2>총괄표제부</h2>'+table(r.recap,['bldNm','mainPurpsCdNm','platArea','totArea','bcRat','vlRat','useAprDay','hhldCnt','hoCnt'],'tbl-recap')
     +'<h2>전유·공용면적'+(ho?' ('+esc(dong?dong+'동 ':'')+esc(ho)+'호)':' (전체)')+'</h2>'+table(ex.slice(0,300),['dongNm','hoNm','flrNoNm','exposPubuseGbCdNm','mainPurpsCdNm','etcPurps','strctCdNm','area'],'tbl-expos')
-    +'<h2>개별공시지가</h2>'+table(r.land,Object.keys(r.land[0]||{}),'tbl-land')
-    +'<h2>주택공시가격</h2>'+table(r.apt.concat(r.house),Object.keys((r.apt[0]||r.house[0])||{}),'tbl-house')
+    +'<h2>개별공시지가 (브이월드 연속지적도)</h2>'+table(r.land,['addr','jibun','gosi_year','gosi_month','jiga'],'tbl-land')
+    +'<p class="note">연속지적도의 공시지가는 갱신이 늦을 수 있습니다. 평가기준일의 값은 부동산공시가격알리미에서 한 번 더 확인하세요. 주택공시가격(개별·공동주택)은 이 조회기에서 아직 가져오지 못합니다.</p>'
     +raw('표제부',r.title)+raw('전유공용(필터 후)',ex)+raw('공시지가',r.land);
 }
 
