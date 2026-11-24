@@ -354,7 +354,7 @@ const locIdx=p=>{let v=78;for(const [t,i] of LOC_IDX)if(p>=t)v=i;return v};
 function floorNum(s){s=String(s||'');const m=s.match(/지(?:하)?\s*(\d+)/);if(m)return -(+m[1]);const n=s.match(/(\d+)/);return n?+n[1]:null}
 function adjAuto(){
   const t=S.title||{},u=(S.use||'')+' '+(S.etcUse||''),strIdx=num($('bStr').value),notes=[];let prod=1;
-  if(strIdx!=null&&strIdx<100){const r=(t.roofCdNm||'')+' '+(t.etcRoof||'');let g=100;if(/함석|자연석|천막|초가|썬라이트|너와/.test(r))g=60;else if(/패널|칼라|유리|폴리카보|FRP|강판/.test(r))g=80;prod*=g/100;notes.push('Ⅰ지붕('+(r.trim()||'미상')+') '+g)}
+  if(strIdx!=null&&strIdx<1){const r=(t.roofCdNm||'')+' '+(t.etcRoof||'');let g=100;if(/함석|자연석|천막|초가|썬라이트|너와/.test(r))g=60;else if(/패널|칼라|유리|폴리카보|FRP|강판/.test(r))g=80;prod*=g/100;notes.push('Ⅰ지붕('+(r.trim()||'미상')+') '+g)}
   const isRes=/아파트|단독|다가구|다세대|연립|다중주택|기숙사/.test(u),isApt=/아파트/.test(u);
   if(!/통나무/.test(S.strct||'')&&(!isRes||isApt)){const fl=+t.grndFlrCnt||0,ta=+t.totArea||0;
     const f=fl<=5?90:fl<=10?100:fl<=15?110:fl<=20?120:130;const a=ta<1000?90:ta<5000?100:ta<10000?110:ta<50000?120:130;
