@@ -254,7 +254,7 @@ const raw=(t,o)=>'<details><summary>'+esc(t)+' 원자료</summary><pre>'+esc(JSO
 async function run(pnu,label){
   const p={sgg:pnu.slice(0,5),bjd:pnu.slice(5,10),plat:pnu[10]==='2'?'1':'0',bun:pnu.slice(11,15),ji:pnu.slice(15,19)};
   const dong=$('dong').value.trim(),ho=$('ho').value.trim();
-  Object.assign(S,{pnu,label,p,dong,ho,umd:(label.match(/(\S+(동|리|가))\s+산?\d/)||[])[1]||''});
+  Object.assign(S,{pnu,label,p,dong,ho,umd:(label.match(/(\S+(동|리|가))\s+(산\s*)?\d/)||[])[1]||''});
   log('필지: '+label+' / PNU '+pnu,'ok');
   const tasks={recap:bldApi('getBrRecapTitleInfo',p),title:bldApi('getBrTitleInfo',p),expos:bldApi('getBrExposPubuseAreaInfo',p),land:keyVw()?landPrice(pnu):Promise.reject(new Error('브이월드 키 없음'))};
   const r={};
@@ -263,7 +263,7 @@ async function run(pnu,label){
   const own=ex.filter(x=>/전유/.test(x.exposPubuseGbCdNm||'')),pub=ex.filter(x=>/공용/.test(x.exposPubuseGbCdNm||''));
   const sOwn=own.reduce((a,x)=>a+(+x.area||0),0),sPub=pub.reduce((a,x)=>a+(+x.area||0),0);
   const t=r.title.find(x=>!dong||digits(x.dongNm)===digits(dong))||r.title[0]||{};
-  const lp=r.land[0]||{};S.jimok=((lp.jibun||'').split(' ')[1])||'';
+  const lp=r.land[0]||{};S.jimok=(((lp.jibun||'').trim().split(/\s+/).pop()||'').match(/^[가-힣]+$/)||[''])[0];
   Object.assign(S,{title:t,own,pub,sOwn,sPub,ex,land:r.land,use:(own[0]&&own[0].mainPurpsCdNm)||t.mainPurpsCdNm||'',etcUse:(own[0]&&own[0].etcPurps)||t.etcPurps||'',strct:(own[0]&&own[0].strctCdNm)||t.strctCdNm||''});
   $('area').value=ho?Math.round((sOwn+sPub)*1e4)/1e4:'';
   $('lp').value=lp.jiga||'';$('lpYear').value=lp.gosi_year||'';
@@ -309,7 +309,7 @@ function calc(){
   if(!S.p)return;
   const pu=$('purpose').value,base=$('baseDate').value;const rows=[];const add=(a,b,c,d)=>rows.push([a,b,c,d]);
   const area=num($('area').value),np=num($('nPrice').value),hp=num($('hPrice').value),lpv=num($('lp').value),ls=num($('landShare').value);
-  let kind=$('kind').value;if(kind==='auto')kind=np?'notice':hp?'house':(S.title&&S.title.mgmBldrgstPk)?'split':'land';
+  let kind=$('kind').value;if(kind==='auto')kind=np?'notice':(hp||/아파트|다세대|연립|단독주택|다가구|다중주택/.test(S.use||''))?'house':(S.title&&S.title.mgmBldrgstPk)?'split':'land';
   const f=['bBase','bStr','bUse','bLoc','bRes'].map(id=>num($(id).value));const adj=num($('bAdj').value)??1;
   const useAdj=pu==='gift'||pu==='inh';
   const bldOk=f.every(v=>v!=null)&&area;const bld=bldOk?f.reduce((a,v)=>a*v,1)*(useAdj?adj:1)*area:null;
