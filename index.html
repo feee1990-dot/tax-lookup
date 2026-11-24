@@ -119,6 +119,7 @@ pre{overflow-x:auto;font-size:12px;background:var(--bg);padding:10px;border-radi
     </fieldset>
     <fieldset><legend>건물 기준시가 (국세청 건물 기준시가 계산방법 고시) — 토지+건물 별도 또는 부가세 안분용</legend>
       <div class="grid g-4">
+        <div style="grid-column:1/-1"><label for="bUseSel">용도지수 항목 (고시 제8조)</label><select id="bUseSel"></select></div>
         <div><label for="bBase">신축가격기준액 (원/㎡)</label><input id="bBase" inputmode="numeric" value="860000"></div>
         <div><label for="bStr">구조지수</label><input id="bStr" inputmode="decimal"></div>
         <div><label for="bUse">용도지수</label><input id="bUse" inputmode="decimal"></div>
@@ -126,7 +127,8 @@ pre{overflow-x:auto;font-size:12px;background:var(--bg);padding:10px;border-radi
         <div><label for="bRes">경과연수별 잔가율</label><input id="bRes" inputmode="decimal"></div>
         <div><label for="bAdj">개별특성 조정률 (상속·증여만)</label><input id="bAdj" inputmode="decimal" placeholder="1"></div>
       </div>
-      <p class="note">지수는 고시 별표에서 찾아 넣습니다. 신축가격기준액 860,000원은 2026.1.1. 시행 고시 제6조 값입니다.</p>
+      <p class="note" id="idxNote">조회하면 건축물대장·공시지가·평가기준일로 지수를 자동으로 채웁니다. 값을 직접 고치면 그 값으로 계산합니다.</p>
+      <p class="note">지수표: 국세청 건물 기준시가 계산방법 고시(2026.1.1. 시행, 제2026-39호) 원문 표를 판독해 넣은 값입니다. 평가기준일이 2026년이 아니면 그 해 고시를 확인해야 합니다. 개별특성 조정률의 구분(Ⅰ~Ⅶ) 간에는 곱해서 적용했으며, 이 결합 방식은 고시 원문에 명시가 없어 홈택스 모의계산 대조가 필요합니다.</p>
     </fieldset>
     <fieldset id="rentBox"><legend>임대차 (상속·증여: 임대료 환산가액 비교)</legend>
       <div class="grid g-4">
@@ -260,7 +262,7 @@ const raw=(t,o)=>'<details><summary>'+esc(t)+' 원자료</summary><pre>'+esc(JSO
 async function run(pnu,label){
   const p={sgg:pnu.slice(0,5),bjd:pnu.slice(5,10),plat:pnu[10]==='2'?'1':'0',bun:pnu.slice(11,15),ji:pnu.slice(15,19)};
   const dong=$('dong').value.trim(),ho=$('ho').value.trim();
-  Object.assign(S,{pnu,label,p,dong,ho,umd:(label.match(/(\S+(동|리|가))\s+(산\s*)?\d/)||[])[1]||''});
+  $('bUseSel').dataset.manual='';Object.assign(S,{pnu,label,p,dong,ho,umd:(label.match(/(\S+(동|리|가))\s+(산\s*)?\d/)||[])[1]||''});
   log('필지: '+label+' / PNU '+pnu,'ok');
   const tasks={recap:bldApi('getBrRecapTitleInfo',p),title:bldApi('getBrTitleInfo',p),expos:bldApi('getBrExposPubuseAreaInfo',p),land:keyVw()?landPrice(pnu):Promise.reject(new Error('브이월드 키 없음'))};
   const r={};
@@ -285,7 +287,7 @@ async function run(pnu,label){
   const u=S.use+' '+S.etcUse;
   $('rtType').value=!r.title.length?'land':/아파트/.test(u)?'apt':/오피스텔/.test(u)?'offi':/다세대|연립/.test(u)?'rh':/단독|다가구|다중주택/.test(u)?'sh':'nrg';
   const [a,b]=rangeFor($('purpose').value,$('baseDate').value);$('rtFrom').value=a;$('rtTo').value=b;
-  nedLinks();
+  nedLinks();autoIdx();
   ['evalSec','nedSec','calcSec','rtSec','detailSec','verdict','summary'].forEach(id=>$(id).classList.remove('hidden'));
   purposeUi();calc();await runRt();
 }
@@ -324,6 +326,58 @@ function nedLinks(){
   $('nedLinks').innerHTML=L.map(([id,t,u])=>'<li><a id="'+id+'" href="'+esc(u)+'" target="_blank" rel="noopener noreferrer">'+esc(t)+'</a></li>').join('');
 }
 function purposeUi(){const pu=$('purpose').value;$('rentBox').classList.toggle('hidden',!(pu==='gift'||pu==='inh'));$('vatBox').classList.toggle('hidden',pu!=='vat')}
+
+
+const STRUCT_IDX=[[/통나무/,135,'1 통나무조'],[/목구조/,115,'2 목구조(대장상 일반목구조 — 전통 목조면 4번 100, 확인 필요)'],[/철골\s*\(?철근\)?\s*콘크리트|철골철근콘크리트|철골콘크리트/,110,'3 철골(철골철근)콘크리트조'],[/경량\s*철골/,79,'9 경량철골조'],[/조립식\s*패널|패널조/,80,'8 조립식패널조'],[/철근\s*콘크리트|석조|프리캐스트|라멘|ALC|스틸하우스/i,100,'4 철근콘크리트조 등'],[/목조/,100,'4 목조'],[/연와|보강\s*콘크리트|보강\s*블록/,95,'5 연와조·보강콘크리트조 등'],[/철골/,95,'5 철골조'],[/시멘트\s*벽돌|황토|시멘트\s*블[록럭]|블[록럭]|와이어\s*패널/,90,'6 시멘트벽돌조·블록조 등'],[/벽돌|조적/,95,'5 연와조(대장상 벽돌·조적구조 — 시멘트벽돌이면 6번 90, 확인 필요)'],[/석회|흙벽돌|돌담|토담/,60,'10 석회 및 흙벽돌조 등'],[/철파이프|강파이프|컨테이너/,59,'11 철파이프조·컨테이너']];
+function resGroup(s){if(/철파이프|강파이프|컨테이너/.test(s))return 'IV';if(/경량\s*철골|석회|흙벽돌|돌담|토담|황토|시멘트\s*블[록럭]|^블[록럭]|조립식|패널조/.test(s)&&!/보강\s*블[록럭]|와이어/.test(s))return 'III';
+  if(/통나무|철골\s*\(?철근|철골철근|철골콘크리트|철근\s*콘크리트|석조|프리캐스트|목구조|라멘/.test(s))return 'I';return 'II'}
+const RES_RATE={I:0.018,II:0.0225,III:0.03,IV:0.045};
+const USE_IDX=[[1,'아파트',110],[2,'단독·다중·다가구·연립·다세대주택, 기숙사 등',100],[3,'관광호텔(5·4성급)',140],[4,'호텔, 관광호텔(3성급 이하), 생활숙박시설 등',130],[5,'외국인관광 도시민박, 한옥체험',120],[6,'여관(모텔)',112],[7,'다중생활시설(2종 근생 제외)',105],[8,'여인숙',100],[9,'백화점',135],[10,'대형점(매장 3,000㎡ 이상), 쇼핑센터 등',125],[11,'일반상점, 기타 판매·영업시설',95],[12,'도매시장, 전통시장 등',85],[13,'여객터미널·철도·공항·항만시설',120],[14,'무도장',140],[15,'유흥주점, 카지노',130],[16,'테마파크 시설 등',120],[17,'단란주점(풍속영업 제외)',115],[18,'무도학원',90],[19,'집회장(경마 등 장외발매소·전화투표소)',130],[20,'예식장, 공연장, 집회장(2종 근생 제외)',115],[21,'동물원·식물원·수족관, 전시장',110],[22,'관람장',105],[23,'종교시설',100],[24,'골프장·스키장·수영장·볼링장 등',125],[25,'기타 체육시설',105],[26,'종합병원',125],[27,'일반·치과·한방·요양병원 등',110],[28,'오피스텔',135],[29,'사무소·금융업소 등(2종 근생 제외)',115],[30,'방송통신시설, 데이터센터',110],[31,'관광휴게시설',110],[32,'학원·교습소(2종 근생 제외)',107],[33,'학교·교육원·연구소·도서관',102],[34,'아동관련·노인복지·사회복지시설',109],[35,'고아원, 노인주거복지시설 등',85],[36,'수련시설',110],[37,'목욕장 3,000㎡ 이상',130],[38,'목욕장 1,000~3,000㎡',115],[39,'목욕장 1,000㎡ 미만',110],[40,'풍속영업시설(소형 단란주점, PC방 500㎡ 이상, 게임장, 노래연습장, 안마시술소 등)',105],[41,'제1종·제2종 근린생활시설(그 밖)',95],[42,'화장시설, 봉안당, 묘지 부속건축물',130],[43,'동물화장·건조장·납골시설',105],[44,'장례식장',115],[45,'동물 전용 장례식장',105],[46,'지식산업센터(아파트형공장)',115],[47,'냉동공장, 반도체·평면디스플레이 공장',100],[48,'그 밖의 공장',78],[49,'원자력 발전시설',300],[50,'발전소',90],[51,'냉동·냉장창고',105],[52,'그 밖의 창고, 하역장, 물류터미널',75],[53,'주유소, 위험물 저장·처리시설',90],[54,'하수처리, 고물상, 폐기물시설',80],[55,'자동차매매장, 운전학원·정비학원',75],[56,'세차장·폐차장·검사장·정비공장·차고',67],[57,'주차장(주택 차고 제외)',60],[58,'가축용 운동시설, 인공수정센터 등',70],[59,'축사, 가축시설, 도축장 등',55],[60,'온실, 기타 동식물관련시설',50]];
+const LOC_IDX=[[0,78],[20000,83],[30000,85],[50000,86],[70000,87],[100000,88],[130000,89],[150000,90],[180000,91],[200000,92],[300000,93],[350000,94],[500000,97],[650000,100],[800000,102],[1000000,104],[1200000,106],[1600000,108],[2000000,114],[2500000,116],[3000000,118],[3500000,120],[4000000,122],[4500000,124],[5000000,126],[5500000,128],[6000000,130],[7000000,132],[8000000,134],[9000000,137],[10000000,140],[15000000,143],[20000000,146],[25000000,149],[30000000,152],[35000000,155],[40000000,158],[45000000,161],[50000000,164],[55000000,167],[60000000,170],[65000000,173],[70000000,176],[75000000,179],[80000000,182]];
+function useAuto(u){
+  if(/아파트/.test(u))return 1;if(/오피스텔/.test(u))return 28;if(/단독|다가구|다세대|연립|다중주택|기숙사|도시형/.test(u))return 2;
+  if(/근린생활/.test(u)){if(/목욕/.test(u))return 39;if(/노래연습|단란|PC|인터넷컴퓨터|안마|게임/.test(u))return 40;return 41}
+  if(/판매/.test(u)){if(/백화점/.test(u))return 9;if(/대형|쇼핑/.test(u))return 10;if(/도매|시장/.test(u))return 12;return 11}
+  if(/업무시설/.test(u))return 29;
+  if(/숙박/.test(u)){if(/관광호텔/.test(u))return 4;if(/여관|모텔/.test(u))return 6;if(/여인숙/.test(u))return 8;return 4}
+  if(/의료/.test(u))return /종합병원/.test(u)?26:27;
+  if(/교육연구/.test(u))return /학원|교습/.test(u)?32:33;
+  if(/노유자/.test(u))return 34;if(/수련/.test(u))return 36;if(/운동/.test(u))return /골프|스키|수영|볼링|스케이트/.test(u)?24:25;
+  if(/문화|집회/.test(u))return /동물원|식물원|전시/.test(u)?21:/관람/.test(u)?22:20;if(/종교/.test(u))return 23;
+  if(/위락/.test(u))return /무도장/.test(u)?14:/단란/.test(u)?17:/무도학원/.test(u)?18:15;
+  if(/공장/.test(u))return /지식산업|아파트형/.test(u)?46:/냉동|반도체|디스플레이/.test(u)?47:48;
+  if(/창고/.test(u))return /냉동|냉장/.test(u)?51:52;if(/위험물|주유/.test(u))return 53;if(/자원순환|분뇨|쓰레기|고물|폐기물/.test(u))return 54;
+  if(/자동차/.test(u))return /주차장/.test(u)?57:/매매|학원/.test(u)?55:56;if(/동물|식물/.test(u))return /온실/.test(u)?60:59;
+  if(/방송|통신|데이터/.test(u))return 30;if(/발전/.test(u))return 50;if(/묘지|화장|봉안/.test(u))return 42;if(/장례/.test(u))return 44;if(/관광휴게/.test(u))return 31;if(/운수|터미널|철도|공항|항만/.test(u))return 13;
+  return 41}
+const locIdx=p=>{let v=78;for(const [t,i] of LOC_IDX)if(p>=t)v=i;return v};
+function floorNum(s){s=String(s||'');const m=s.match(/지(?:하)?\s*(\d+)/);if(m)return -(+m[1]);const n=s.match(/(\d+)/);return n?+n[1]:null}
+function adjAuto(){
+  const t=S.title||{},u=(S.use||'')+' '+(S.etcUse||''),strIdx=num($('bStr').value),notes=[];let prod=1;
+  if(strIdx!=null&&strIdx<100){const r=(t.roofCdNm||'')+' '+(t.etcRoof||'');let g=100;if(/함석|자연석|천막|초가|썬라이트|너와/.test(r))g=60;else if(/패널|칼라|유리|폴리카보|FRP|강판/.test(r))g=80;prod*=g/100;notes.push('Ⅰ지붕('+(r.trim()||'미상')+') '+g)}
+  const isRes=/아파트|단독|다가구|다세대|연립|다중주택|기숙사/.test(u),isApt=/아파트/.test(u);
+  if(!/통나무/.test(S.strct||'')&&(!isRes||isApt)){const fl=+t.grndFlrCnt||0,ta=+t.totArea||0;
+    const f=fl<=5?90:fl<=10?100:fl<=15?110:fl<=20?120:130;const a=ta<1000?90:ta<5000?100:ta<10000?110:ta<50000?120:130;
+    const g=isApt?f:Math.max(f,a);if(fl||ta){prod*=g/100;notes.push('Ⅱ최고층수 '+fl+'층('+f+')'+(isApt?'':'·연면적 '+fmt(ta)+'㎡('+a+')')+' 중 높은 값 '+g)}}
+  if(/아파트|다세대|연립/.test(u)&&S.sOwn){const g=S.sOwn>=215?140:S.sOwn>=149?120:100;if(g!==100){prod*=g/100;notes.push('Ⅲ공동주택 전용 '+fmt(S.sOwn)+'㎡ '+g)}}
+  else if(/단독|다가구|다중주택/.test(u)&&+t.totArea){const ta=+t.totArea;const g=ta>=331?140:ta>=264?120:100;if(g!==100){prod*=g/100;notes.push('Ⅲ단독 연면적 '+g)}}
+  if(!isRes&&S.ho){const fn=floorNum(S.own&&S.own[0]&&S.own[0].flrNoNm),top=+t.grndFlrCnt||99;let g=null;
+    if(fn===1)g=120;else if(fn===2)g=105;else if(fn===-1&&top<=5)g=80;else if(fn!=null&&fn<=-2&&top<=5)g=70;
+    if(g){prod*=g/100;notes.push('Ⅳ상가 '+(fn<0?'지하'+(-fn):fn)+'층 '+g)}}
+  return {v:Math.round(prod*1e6)/1e6,notes}}
+function autoIdx(){
+  if(!S.p)return;const notes=[];
+  const st=STRUCT_IDX.find(([re])=>re.test(S.strct||''));
+  if(st){$('bStr').value=st[1]/100;notes.push('구조 '+st[2]+' '+st[1])}else notes.push('구조지수: 구조명 "'+(S.strct||'-')+'" 매칭 실패, 직접 입력');
+  const uSel=$('bUseSel');if(!uSel.dataset.manual)uSel.value=String(useAuto((S.use||'')+' '+(S.etcUse||'')));
+  const ur=USE_IDX.find(r=>String(r[0])===uSel.value);if(ur){$('bUse').value=ur[2]/100;notes.push('용도 '+ur[0]+' '+ur[1]+' '+ur[2])}
+  const lpv=num($('lp').value);if(lpv!=null){const li=locIdx(lpv);$('bLoc').value=li/100;notes.push('위치 공시지가 '+lpv.toLocaleString('ko-KR')+'원 → '+li)}
+  const t=S.title||{};const built=+(String(t.useAprDay||t.pmsDay||'').slice(0,4))||null;const base=+($('baseDate').value||'').slice(0,4)||new Date().getFullYear();
+  if(built){const g=resGroup(S.strct||'');const r=Math.max(0.1,1-RES_RATE[g]*Math.max(0,base-built));$('bRes').value=Math.round(r*1e4)/1e4;notes.push('잔가율 '+g+'그룹(연 '+RES_RATE[g]+') '+built+'년 신축·'+base+'년 기준 '+(Math.round(r*1e4)/1e4))}
+  else notes.push('잔가율: 사용승인일 없음, 직접 입력');
+  const pu=$('purpose').value;if(pu==='gift'||pu==='inh'){const a=adjAuto();$('bAdj').value=a.v;notes.push('조정률 '+a.v+(a.notes.length?' ('+a.notes.join(', ')+')':' (해당 항목 없음)'))}else{$('bAdj').value=1;notes.push('조정률: 양도·부가세는 미적용(고시 §5②)')}
+  $('idxNote').textContent='자동 산정: '+notes.join(' / ');
+}
 
 function calc(){
   if(!S.p)return;
@@ -385,6 +439,10 @@ function calc(){
 ['purpose','baseDate'].forEach(id=>$(id).addEventListener('change',()=>{purposeUi();if(S.p){const [a,b]=rangeFor($('purpose').value,$('baseDate').value);$('rtFrom').value=a;$('rtTo').value=b;calc()}}));
 document.querySelectorAll('#evalSec input,#evalSec select').forEach(el=>el.addEventListener('input',calc));
 $('rtGo').addEventListener('click',()=>runRt());
+$('bUseSel').innerHTML=USE_IDX.map(r=>'<option value="'+r[0]+'">'+r[0]+'. '+esc(r[1])+' ('+r[2]+')</option>').join('');
+$('bUseSel').addEventListener('change',()=>{$('bUseSel').dataset.manual='1';autoIdx();calc()});
+['lp','baseDate','purpose'].forEach(id=>$(id).addEventListener('change',()=>{autoIdx();calc()}));
+$('lp').addEventListener('input',()=>{autoIdx();calc()});
 $('copyBtn').addEventListener('click',async()=>{try{await navigator.clipboard.writeText(S.text||'');$('copyMsg').textContent='복사했습니다.'}catch(e){$('copyMsg').textContent='복사가 막혔습니다. 표를 직접 선택해 복사하세요.'}});
 async function start(fn){$('status').innerHTML='';$('go').disabled=true;try{await fn()}catch(e){log(e.message,'warn')}finally{$('go').disabled=false}}
 $('f').addEventListener('submit',e=>{e.preventDefault();const q=$('q').value.trim();if(!q){log('주소를 입력하세요.','warn');return}start(async()=>{const{pnu,label}=await resolvePnu(q);await run(pnu,label)})});
