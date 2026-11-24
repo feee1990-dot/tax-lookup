@@ -103,7 +103,7 @@ pre{overflow-x:auto;font-size:12px;background:var(--bg);padding:10px;border-radi
     <p class="note">값을 바꾸면 아래 결론과 계산 근거가 바로 다시 계산됩니다. 비워둔 항목은 계산에서 빠집니다.</p>
     <fieldset><legend>기준시가 구분</legend>
       <div class="grid g-4">
-        <div><label for="kind">구분</label><select id="kind"><option value="auto">자동 판단</option><option value="notice">상업용·오피스텔 국세청 일괄고시</option><option value="split">토지 + 건물 별도</option><option value="house">주택 공시가격</option></select></div>
+        <div><label for="kind">구분</label><select id="kind"><option value="auto">자동 판단</option><option value="notice">상업용·오피스텔 국세청 일괄고시</option><option value="split">토지 + 건물 별도</option><option value="house">주택 공시가격</option><option value="land">토지만 (건물 없음)</option></select></div>
         <div><label for="nPrice">국세청 고시 단가 (원/㎡)</label><input id="nPrice" inputmode="numeric" placeholder="홈택스 조회값"></div>
         <div><label for="nDate">고시일자</label><input id="nDate" placeholder="예: 2026.01.01"></div>
         <div><label for="hPrice">주택 공시가격 (원)</label><input id="hPrice" inputmode="numeric" placeholder="주택일 때"></div>
@@ -114,7 +114,7 @@ pre{overflow-x:auto;font-size:12px;background:var(--bg);padding:10px;border-radi
         <div><label for="area">건물면적 ㎡ (전유+공용)</label><input id="area" inputmode="decimal"></div>
         <div><label for="lp">적용 개별공시지가 (원/㎡)</label><input id="lp" inputmode="numeric"></div>
         <div><label for="lpYear">공시지가 기준연도</label><input id="lpYear" placeholder="예: 2026"></div>
-        <div><label for="landShare">대지권 면적 ㎡ (등기부)</label><input id="landShare" inputmode="decimal" placeholder="토지분 계산용"></div>
+        <div><label for="landShare">토지 면적 ㎡ (대지권 또는 토지대장)</label><input id="landShare" inputmode="decimal" placeholder="집합건물은 대지권, 토지는 토지대장 면적"></div>
       </div>
     </fieldset>
     <fieldset><legend>건물 기준시가 (국세청 건물 기준시가 계산방법 고시) — 토지+건물 별도 또는 부가세 안분용</legend>
@@ -263,12 +263,12 @@ async function run(pnu,label){
   const own=ex.filter(x=>/전유/.test(x.exposPubuseGbCdNm||'')),pub=ex.filter(x=>/공용/.test(x.exposPubuseGbCdNm||''));
   const sOwn=own.reduce((a,x)=>a+(+x.area||0),0),sPub=pub.reduce((a,x)=>a+(+x.area||0),0);
   const t=r.title.find(x=>!dong||digits(x.dongNm)===digits(dong))||r.title[0]||{};
-  const lp=r.land[0]||{};
+  const lp=r.land[0]||{};S.jimok=((lp.jibun||'').split(' ')[1])||'';
   Object.assign(S,{title:t,own,pub,sOwn,sPub,ex,land:r.land,use:(own[0]&&own[0].mainPurpsCdNm)||t.mainPurpsCdNm||'',etcUse:(own[0]&&own[0].etcPurps)||t.etcPurps||'',strct:(own[0]&&own[0].strctCdNm)||t.strctCdNm||''});
   $('area').value=ho?Math.round((sOwn+sPub)*1e4)/1e4:'';
   $('lp').value=lp.jiga||'';$('lpYear').value=lp.gosi_year||'';
   const sum=[['건물명',t.bldNm||'-'],['주용도',S.use||'-'],['구조',S.strct||'-'],['사용승인일',fmtDay(t.useAprDay)],['연면적㎡',t.totArea?fmt(+t.totArea):'-'],['호수',t.hoCnt||'-'],
-    ['전유면적㎡',ho?fmt(sOwn):'호 미입력'],['공용면적㎡',ho?fmt(sPub):'호 미입력'],['대지면적㎡',t.platArea?fmt(+t.platArea):'-'],['개별공시지가 원/㎡',lp.jiga?(+lp.jiga).toLocaleString('ko-KR')+' ('+(lp.gosi_year||'?')+')':'-']];
+    ['전유면적㎡',ho?fmt(sOwn):'호 미입력'],['공용면적㎡',ho?fmt(sPub):'호 미입력'],['대지면적㎡',t.platArea?fmt(+t.platArea):'-'],['지목',S.jimok||'-'],['개별공시지가 원/㎡',lp.jiga?(+lp.jiga).toLocaleString('ko-KR')+' ('+(lp.gosi_year||'?')+')':'-']];
   $('summary').innerHTML=sum.map(([a,b])=>'<div><b>'+esc(a)+'</b><span>'+esc(b)+'</span></div>').join('');
   $('detailOut').innerHTML='<h2 style="font-size:17px">표제부</h2>'+table(r.title,['bldNm','dongNm','mainPurpsCdNm','etcPurps','strctCdNm','grndFlrCnt','ugrndFlrCnt','platArea','archArea','totArea','useAprDay','pmsDay','hhldCnt','hoCnt','regstrKindCdNm'],'tbl-title')
     +'<h2 style="font-size:17px">총괄표제부</h2>'+table(r.recap,['bldNm','mainPurpsCdNm','platArea','totArea','bcRat','vlRat','useAprDay','hhldCnt','hoCnt'],'tbl-recap')
@@ -277,7 +277,7 @@ async function run(pnu,label){
     +'<p class="note">연속지적도 공시지가는 갱신이 늦을 수 있습니다. 평가기준일 현재 고시된 값은 부동산공시가격알리미에서 확인해 위 "적용 개별공시지가"에 넣으세요.</p>'
     +raw('표제부',r.title)+raw('전유공용(필터 후)',ex);
   const u=S.use+' '+S.etcUse;
-  $('rtType').value=/아파트/.test(u)?'apt':/오피스텔/.test(u)?'offi':/다세대|연립/.test(u)?'rh':/단독|다가구|다중주택/.test(u)?'sh':'nrg';
+  $('rtType').value=!r.title.length?'land':/아파트/.test(u)?'apt':/오피스텔/.test(u)?'offi':/다세대|연립/.test(u)?'rh':/단독|다가구|다중주택/.test(u)?'sh':'nrg';
   const [a,b]=rangeFor($('purpose').value,$('baseDate').value);$('rtFrom').value=a;$('rtTo').value=b;
   ['evalSec','calcSec','rtSec','detailSec','verdict','summary'].forEach(id=>$(id).classList.remove('hidden'));
   purposeUi();calc();await runRt();
@@ -309,7 +309,7 @@ function calc(){
   if(!S.p)return;
   const pu=$('purpose').value,base=$('baseDate').value;const rows=[];const add=(a,b,c,d)=>rows.push([a,b,c,d]);
   const area=num($('area').value),np=num($('nPrice').value),hp=num($('hPrice').value),lpv=num($('lp').value),ls=num($('landShare').value);
-  let kind=$('kind').value;if(kind==='auto')kind=np?'notice':hp?'house':'split';
+  let kind=$('kind').value;if(kind==='auto')kind=np?'notice':hp?'house':(S.title&&S.title.mgmBldrgstPk)?'split':'land';
   const f=['bBase','bStr','bUse','bLoc','bRes'].map(id=>num($(id).value));const adj=num($('bAdj').value)??1;
   const useAdj=pu==='gift'||pu==='inh';
   const bldOk=f.every(v=>v!=null)&&area;const bld=bldOk?f.reduce((a,v)=>a*v,1)*(useAdj?adj:1)*area:null;
@@ -323,6 +323,9 @@ function calc(){
     add('기준시가(토지+건물 일괄)','고시단가 '+fmt(np)+'원/㎡ × 면적 '+fmt(area)+'㎡ (전유+공용)',won(std),'홈택스 고시: 호별 기준시가 = 단위면적 기준시가 × (전용+공용)');
   }else if(kind==='house'){
     std=hp;add('기준시가 구분','주택 공시가격','','상증법 §61①4 / 소득세법 §99①1라');add('기준시가',fmt(hp)+'원',won(std),'부동산 가격공시에 관한 법률');
+  }else if(kind==='land'){
+    add('기준시가 구분','토지 (건물 없음)','지목 '+esc(S.jimok||'-'),'상증법 §61①1 / 소득세법 §99①1가');
+    std=land;add('토지 기준시가','공시지가 '+fmt(lpv)+'원/㎡('+esc($('lpYear').value||'?')+') × 면적 '+fmt(ls)+'㎡',won(std),'개별공시지가는 평가기준일 현재 고시된 것(상증법 시행령 §50⑥). 배율지역이면 배율방법(§61②)');
   }else{
     add('기준시가 구분','토지 + 건물 별도','','상증법 §61①1·2 / 소득세법 §99①1가·나');
     add('토지분','공시지가 '+fmt(lpv)+'원/㎡('+esc($('lpYear').value||'?')+') × 대지권 '+fmt(ls)+'㎡',won(land),'개별공시지가는 평가기준일 현재 고시된 것(상증법 시행령 §50⑥)');
