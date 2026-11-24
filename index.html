@@ -263,7 +263,7 @@ async function run(pnu,label){
   const own=ex.filter(x=>/전유/.test(x.exposPubuseGbCdNm||'')),pub=ex.filter(x=>/공용/.test(x.exposPubuseGbCdNm||''));
   const sOwn=own.reduce((a,x)=>a+(+x.area||0),0),sPub=pub.reduce((a,x)=>a+(+x.area||0),0);
   const t=r.title.find(x=>!dong||digits(x.dongNm)===digits(dong))||r.title[0]||{};
-  const lp=r.land[0]||{};S.jimok=(((lp.jibun||'').trim().split(/\s+/).pop()||'').match(/^[가-힣]+$/)||[''])[0];
+  const lp=r.land[0]||{};S.jimok=((lp.jibun||'').trim().match(/([가-힣]+)$/)||['',''])[1];
   Object.assign(S,{title:t,own,pub,sOwn,sPub,ex,land:r.land,use:(own[0]&&own[0].mainPurpsCdNm)||t.mainPurpsCdNm||'',etcUse:(own[0]&&own[0].etcPurps)||t.etcPurps||'',strct:(own[0]&&own[0].strctCdNm)||t.strctCdNm||''});
   $('area').value=ho?Math.round((sOwn+sPub)*1e4)/1e4:'';
   $('lp').value=lp.jiga||'';$('lpYear').value=lp.gosi_year||'';
@@ -289,7 +289,8 @@ async function runRt(){
   let rows=[],errs=[];
   for(const ym of months){const lawd=(+ym<202607&&OLD_SGG[S.p.sgg])||S.p.sgg;
     try{const it=await rtMonth(type,lawd,ym);rows=rows.concat(it.map(o=>Object.assign(o,{_ym:ym})))}catch(e){errs.push(ym+': '+e.message)}}
-  const umd=S.umd;const inDong=rows.filter(o=>!umd||(o.umdNm||o['법정동']||'').trim()===umd);
+  const umd=S.umd;const inDong=rows.filter(o=>{if(!umd)return true;const u=(o.umdNm||o['법정동']||'').trim();const s=[u,o.ri||'',o.riNm||''].join(' ');
+    if(u===umd||s.includes(umd))return true;return /[읍면]$/.test(u)&&S.label.includes(u)&&!rows.some(x=>(x.ri||x.riNm||'').includes(umd))});
   const bun=String(+S.p.bun),jiN=String(+S.p.ji);const jb=bun+(jiN!=='0'?'-'+jiN:'');
   const same=o=>{const j=(o.jibun||o['지번']||'').trim();return j===jb||(j.includes('*')&&j[0]===jb[0]&&j.length===jb.length)};
   const area=o=>num(o.excluUseAr||o.buildingAr||o.dealArea||o['전용면적']);
@@ -297,9 +298,9 @@ async function runRt(){
   inDong.forEach(o=>{o['거래일']=(o.dealYear||'')+'-'+String(o.dealMonth||'').padStart(2,'0')+'-'+String(o.dealDay||'').padStart(2,'0');o['금액(원)']=price(o)!=null?Math.round(price(o)).toLocaleString('ko-KR'):'';const ar=area(o);o['㎡당(원)']=ar&&price(o)?Math.round(price(o)/ar).toLocaleString('ko-KR'):'';o['같은지번']=same(o)?'●':''});
   inDong.sort((a,b)=>(b['같은지번']?1:0)-(a['같은지번']?1:0)||a['거래일'].localeCompare(b['거래일']));
   S.rt=inDong;
-  const cols=['같은지번','거래일','umdNm','jibun','aptNm','offiNm','mhouseNm','buildingType','buildingUse','floor','excluUseAr','buildingAr','plottageAr','dealArea','금액(원)','㎡당(원)','buildYear','cdealType','dealingGbn'];
+  const cols=['같은지번','거래일','umdNm','ri','jibun','jimok','landUse','aptNm','offiNm','mhouseNm','buildingType','buildingUse','floor','excluUseAr','buildingAr','plottageAr','dealArea','금액(원)','㎡당(원)','buildYear','cdealType','dealingGbn'];
   $('rtNote').textContent=RT[type][1]+' / '+months[0]+'~'+months[months.length-1]+' / '+(umd||'전체')+' 기준 '+inDong.length+'건 (같은 시군구 전체 '+rows.length+'건). 노란 줄은 같은 지번(일부 가림 지번은 자리수 기준 추정)입니다.'+(errs.length?' 오류: '+errs.slice(0,3).join(' / '):'');
-  $('rtOut').innerHTML=table(inDong,cols,'tbl-rt',o=>o['같은지번']);
+  $('rtOut').innerHTML=table(inDong,cols,'tbl-rt',o=>o['같은지번'])+raw('실거래 원자료(필터 전 앞 3건)',rows.slice(0,3));
   calc();
 }
 
