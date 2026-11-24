@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>부동산 평가 조회기</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+/* VOICE: 사무실 장부처럼 차분하고 정확하게
+   IDEA: 세무 조사표 — 칸이 맞는 원장 양식
+   PICTURE: 요약 카드(평가에 쓰는 숫자)가 첫 화면의 중심
+   COLOUR and TYPE: 흰 바탕, 진남색 잉크, 초록 확인/주황 경고 / IBM Plex Sans KR
+   LAYOUT: 입력 한 줄 → 요약 → 세부 표 → 원자료 */
+:root{color-scheme:light dark;--bg:light-dark(#ffffff,#10161f);--ink:light-dark(#14213a,#e6ebf2);--mute:light-dark(#5b6678,#9aa6b6);--line:light-dark(#d9dee6,#2a3442);--panel:light-dark(#f3f5f8,#18212d);--acc:light-dark(#0f5fd6,#6aa5ff);--ok:light-dark(#127a46,#4fd18b);--warn:light-dark(#b54708,#f5a35c)}
+:root[data-theme=light]{color-scheme:light}:root[data-theme=dark]{color-scheme:dark}
+*{box-sizing:border-box;min-width:0}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.55 "IBM Plex Sans KR",system-ui,sans-serif;overflow-x:clip}
+.band{padding:clamp(20px,3vw,40px) max(4vw,16px);max-width:1240px;margin:0 auto}
+h1{font-size:clamp(26px,4vw,36px);line-height:1.1;margin:0 0 6px}
+h2{font-size:20px;margin:28px 0 10px}
+p.sub{color:var(--mute);margin:0 0 18px}
+form{display:grid;grid-template-columns:minmax(0,3fr) minmax(0,1fr) minmax(0,1fr) auto;gap:10px;align-items:end}
+label{display:block;font-size:13px;color:var(--mute);margin-bottom:4px}
+input{width:100%;font:inherit;font-size:16px;padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink);min-height:44px}
+input:focus,button:focus,summary:focus{outline:2px solid var(--acc);outline-offset:2px}
+button{font:inherit;font-weight:600;min-height:44px;padding:0 20px;border-radius:8px;border:0;background:var(--acc);color:#fff;cursor:pointer}
+button.ghost{background:transparent;color:var(--acc);border:1px solid var(--acc)}
+details{border:1px solid var(--line);border-radius:10px;padding:10px 14px;margin-top:12px;background:var(--panel)}
+summary{cursor:pointer;font-weight:600}
+.keys{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto;gap:10px;align-items:end;margin-top:10px}
+.manual{display:grid;grid-template-columns:repeat(4,minmax(0,1fr)) auto;gap:10px;align-items:end;margin-top:10px}
+#status{margin:16px 0 0;padding:0;list-style:none;font-size:14px}
+#status li{padding:4px 0;border-bottom:1px dashed var(--line)}
+.ok{color:var(--ok)}.warn{color:var(--warn)}
+.sum{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:1px;background:var(--line);border:1px solid var(--line);border-radius:12px;overflow:hidden;margin-top:18px}
+.sum div{background:var(--bg);padding:14px 16px}
+.sum b{display:block;font-size:13px;color:var(--mute);font-weight:400}
+.sum span{font-size:20px;font-weight:700;font-variant-numeric:tabular-nums}
+.scroll{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:14px}
+th,td{border-bottom:1px solid var(--line);padding:7px 8px;text-align:left;vertical-align:top;white-space:nowrap}
+th{color:var(--mute);font-weight:600;background:var(--panel)}
+td.n{text-align:right;font-variant-numeric:tabular-nums}
+pre{overflow-x:auto;font-size:12px;background:var(--panel);padding:10px;border-radius:8px;max-height:320px}
+.note{font-size:13px;color:var(--mute)}
+@media(max-width:700px){form,.keys,.manual{grid-template-columns:minmax(0,1fr)}}
+</style>
+</head>
+<body>
+<div class="band">
+  <h1>부동산 평가 조회기</h1>
+  <p class="sub">주소와 호수를 넣으면 건축물대장(공공데이터포털)과 공시가격(브이월드)을 한 화면에 모읍니다. 인증키는 이 브라우저에만 저장됩니다.</p>
+
+  <form id="f">
+    <div><label for="q">주소 (지번 또는 도로명)</label><input id="q" placeholder="예: 인천 서해구 가정동 617-3" autocomplete="off"></div>
+    <div><label for="dong">동 (선택)</label><input id="dong" placeholder="예: 101" autocomplete="off"></div>
+    <div><label for="ho">호 (선택)</label><input id="ho" placeholder="예: 409" autocomplete="off"></div>
+    <button id="go" type="submit">조회</button>
+  </form>
+
+  <details id="manualBox">
+    <summary>주소 변환이 안 될 때: 직접 입력</summary>
+    <div class="manual">
+      <div><label for="bjd">법정동코드 10자리</label><input id="bjd" inputmode="numeric" placeholder="2827510600"></div>
+      <div><label for="san">산 여부</label><input id="san" placeholder="비우면 일반, 산이면 1"></div>
+      <div><label for="bun">본번</label><input id="bun" inputmode="numeric" placeholder="617"></div>
+      <div><label for="ji">부번</label><input id="ji" inputmode="numeric" placeholder="3"></div>
+      <button id="goManual" type="button" class="ghost">이 값으로 조회</button>
+    </div>
+  </details>
+
+  <details id="keyBox">
+    <summary id="keyState">인증키 설정</summary>
+    <div class="keys">
+      <div><label for="kData">공공데이터포털 일반 인증키</label><input id="kData" type="password" autocomplete="off" placeholder="붙여넣기"></div>
+      <div><label for="kVw">브이월드 인증키</label><input id="kVw" type="password" autocomplete="off" placeholder="붙여넣기"></div>
+      <button id="saveKeys" type="button">저장</button>
+    </div>
+    <p class="note">저장한 키는 화면에 다시 표시되지 않습니다. 바꾸려면 새 키를 넣고 저장하세요. 빈 칸으로 저장하면 기존 키를 유지합니다.</p>
+  </details>
+
+  <ul id="status"></ul>
+  <div id="out"></div>
+</div>
+
+<script>
+{
+const $=id=>document.getElementById(id);
+const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const store={get(k){try{return localStorage.getItem(k)||''}catch(e){return ''}},set(k,v){try{localStorage.setItem(k,v)}catch(e){}}};
+const keyData=()=>store.get('tl_kData'),keyVw=()=>store.get('tl_kVw');
+function showKeyState(){$('keyState').textContent='인증키 설정 — 공공데이터포털: '+(keyData()?'저장됨':'없음')+' / 브이월드: '+(keyVw()?'저장됨':'없음');if(!keyData())$('keyBox').open=true}
+$('saveKeys').addEventListener('click',()=>{const a=$('kData').value.trim(),b=$('kVw').value.trim();if(a)store.set('tl_kData',a);if(b)store.set('tl_kVw',b);$('kData').value='';$('kVw').value='';showKeyState();log('인증키를 이 브라우저에 저장했습니다.','ok')});
+showKeyState();
+
+function log(msg,cls){const li=document.createElement('li');li.textContent=msg;if(cls)li.className=cls;$('status').appendChild(li)}
+
+function jsonp(url){return new Promise((res,rej)=>{const cb='vw'+Date.now()+Math.floor(Math.random()*1e6);const s=document.createElement('script');const t=setTimeout(()=>{done();rej(new Error('응답 시간 초과'))},12000);function done(){clearTimeout(t);try{delete window[cb]}catch(e){window[cb]=undefined}s.remove()}window[cb]=d=>{done();res(d)};s.onerror=()=>{done();rej(new Error('응답 없음(키·도메인 확인)'))};s.src=url+'&callback='+cb;document.body.appendChild(s)})}
+
+async function vSearch(query,category){
+  const u='https://api.vworld.kr/req/search?service=search&request=search&version=2.0&size=10&page=1&type=address&format=json&errorformat=json'
+    +'&category='+category+'&query='+encodeURIComponent(query)+'&key='+encodeURIComponent(keyVw())+'&domain='+encodeURIComponent(location.origin);
+  const d=await jsonp(u);const r=d&&d.response;
+  if(!r)throw new Error('브이월드 응답 형식 이상');
+  if(r.status==='ERROR')throw new Error('브이월드 오류: '+(r.error&&(r.error.text||r.error.code)||''));
+  return (r.result&&r.result.items)||[];
+}
+
+async function resolvePnu(q){
+  if(!keyVw())throw new Error('브이월드 키가 없어 주소를 변환할 수 없습니다. 직접 입력을 쓰세요.');
+  let items=await vSearch(q,'parcel');
+  let hit=items.find(i=>/^\d{19}$/.test(i.id));
+  if(hit)return {pnu:hit.id,label:(hit.address&&hit.address.parcel)||q};
+  items=await vSearch(q,'road');
+  if(!items.length)throw new Error('주소를 찾지 못했습니다.');
+  const it=items[0],a=it.address||{};let parcel=a.parcel||'';
+  if(parcel&&a.road&&!/(시|도)\s/.test(parcel.split(' ')[0]+' ')){const pre=a.road.split(' ').slice(0,2).join(' ');parcel=pre+' '+parcel}
+  if(parcel){const p=await vSearch(parcel,'parcel');hit=p.find(i=>/^\d{19}$/.test(i.id));if(hit)return {pnu:hit.id,label:(hit.address&&hit.address.parcel)||parcel,bld:a.bldnm}}
+  if(/^\d{19}/.test(it.id||''))return {pnu:it.id.slice(0,19),label:(a.road||q)+' (건물관리번호에서 추출)',bld:a.bldnm};
+  throw new Error('지번(PNU) 변환 실패');
+}
+
+async function dataApi(op,p,extra){
+  const k=keyData();if(!k)throw new Error('공공데이터포털 키가 없습니다.');
+  const kk=k.includes('%')?k:encodeURIComponent(k);
+  let all=[],page=1,total=0;
+  do{
+    const u='https://apis.data.go.kr/1613000/BldRgstHubService/'+op+'?serviceKey='+kk+'&sigunguCd='+p.sgg+'&bjdongCd='+p.bjd+'&platGbCd='+p.plat+'&bun='+p.bun+'&ji='+p.ji+'&_type=json&numOfRows=100&pageNo='+page+(extra||'');
+    const res=await fetch(u);const txt=await res.text();let j;
+    try{j=JSON.parse(txt)}catch(e){throw new Error(op+': 응답 해석 실패 '+txt.slice(0,80))}
+    if(j.OpenAPI_ServiceResponse){const h=j.OpenAPI_ServiceResponse.cmmMsgHeader||{};throw new Error(op+': '+(h.errMsg||'')+' '+(h.returnAuthMsg||''))}
+    const r=j.response||{},h=r.header||{};if(h.resultCode&&h.resultCode!=='00')throw new Error(op+': '+h.resultMsg);
+    const b=r.body||{};total=+b.totalCount||0;let it=b.items&&b.items.item;if(it&&!Array.isArray(it))it=[it];all=all.concat(it||[]);page++;
+  }while(all.length<total&&page<=10);
+  return all;
+}
+
+async function nedApi(op,pnu,extra){
+  const y=new Date().getFullYear();let last=[];
+  for(const yr of [y,y-1]){
+    const u='https://api.vworld.kr/ned/data/'+op+'?key='+encodeURIComponent(keyVw())+'&domain='+encodeURIComponent(location.origin)+'&pnu='+pnu+'&stdrYear='+yr+'&format=json&numOfRows=100&pageNo=1'+(extra||'');
+    const d=await jsonp(u);const box=d&&Object.values(d).find(v=>v&&v.field);
+    const f=box?(Array.isArray(box.field)?box.field:[box.field]):[];
+    if(f.length)return f;last=f;
+  }
+  return last;
+}
+
+const L={platPlc:'대지위치',newPlatPlc:'도로명주소',bldNm:'건물명',dongNm:'동',hoNm:'호',flrNoNm:'층',exposPubuseGbCdNm:'전유/공용',mainPurpsCdNm:'주용도',etcPurps:'기타용도',strctCdNm:'구조',etcStrct:'기타구조',roofCdNm:'지붕',grndFlrCnt:'지상층수',ugrndFlrCnt:'지하층수',platArea:'대지면적㎡',archArea:'건축면적㎡',totArea:'연면적㎡',vlRatEstmTotArea:'용적률산정연면적㎡',bcRat:'건폐율%',vlRat:'용적률%',useAprDay:'사용승인일',pmsDay:'허가일',stcnsDay:'착공일',hhldCnt:'세대수',hoCnt:'호수',fmlyCnt:'가구수',regstrKindCdNm:'대장종류',regstrGbCdNm:'대장구분',area:'면적㎡',mgmBldrgstPk:'관리번호'};
+function table(rows,cols,id){
+  if(!rows.length)return '<p class="note" id="'+id+'">결과 없음</p>';
+  cols=cols.filter(c=>rows.some(r=>r[c]!==undefined&&r[c]!==''));
+  return '<div class="scroll"><table id="'+id+'"><thead><tr>'+cols.map(c=>'<th>'+esc(L[c]||c)+'</th>').join('')+'</tr></thead><tbody>'+
+    rows.map(r=>'<tr>'+cols.map(c=>{const v=r[c];const num=typeof v==='number'||/^-?\d+(\.\d+)?$/.test(String(v??''));return '<td'+(num?' class="n"':'')+'>'+esc(v)+'</td>'}).join('')+'</tr>').join('')+'</tbody></table></div>';
+}
+function raw(title,obj){return '<details><summary>'+esc(title)+' 원자료</summary><pre>'+esc(JSON.stringify(obj,null,1))+'</pre></details>'}
+const digits=s=>String(s??'').replace(/[^0-9]/g,'');
+const fmtDay=s=>/^\d{8}$/.test(s||'')?s.slice(0,4)+'-'+s.slice(4,6)+'-'+s.slice(6):(s||'-');
+const n2=v=>(Math.round((+v||0)*100)/100).toLocaleString('ko-KR');
+
+async function run(pnu,label){
+  const p={sgg:pnu.slice(0,5),bjd:pnu.slice(5,10),plat:pnu[10]==='2'?'1':'0',bun:pnu.slice(11,15),ji:pnu.slice(15,19)};
+  const dong=$('dong').value.trim(),ho=$('ho').value.trim();
+  log('필지: '+label+' / PNU '+pnu,'ok');
+  const tasks={
+    recap:dataApi('getBrRecapTitleInfo',p),
+    title:dataApi('getBrTitleInfo',p),
+    expos:dataApi('getBrExposPubuseAreaInfo',p),
+    land:keyVw()?nedApi('getIndvdLandPriceAttr',pnu):Promise.reject(new Error('브이월드 키 없음')),
+    apt:keyVw()&&ho?nedApi('getApartHousingPriceAttr',pnu,(dong?'&dongNm='+encodeURIComponent(dong):'')+'&hoNm='+encodeURIComponent(ho)):Promise.resolve([]),
+    house:keyVw()&&!ho?nedApi('getIndvdHousingPriceAttr',pnu):Promise.resolve([])
+  };
+  const r={};
+  for(const [k,pr] of Object.entries(tasks)){try{r[k]=await pr;log(k+': '+r[k].length+'건',r[k].length?'ok':'')}catch(e){r[k]=[];log(k+': '+e.message,'warn')}}
+  let ex=r.expos;
+  if(ho)ex=ex.filter(x=>digits(x.hoNm)===digits(ho)&&(!dong||digits(x.dongNm)===digits(dong)||!digits(x.dongNm)));
+  const own=ex.filter(x=>/전유/.test(x.exposPubuseGbCdNm||'')),pub=ex.filter(x=>/공용/.test(x.exposPubuseGbCdNm||''));
+  const sOwn=own.reduce((a,x)=>a+(+x.area||0),0),sPub=pub.reduce((a,x)=>a+(+x.area||0),0);
+  const t=r.title.find(x=>!dong||digits(x.dongNm)===digits(dong))||r.title[0]||{};
+  const lp=r.land[0]||{};const lpv=lp.pblntfPclnd||lp.pblntfPc||'';
+  const ap=r.apt[0]||r.house[0]||{};const apv=ap.pblntfPc||ap.housePc||'';
+  const sum=[['건물명',t.bldNm||'-'],['주용도',(own[0]&&own[0].mainPurpsCdNm)||t.mainPurpsCdNm||'-'],['구조',(own[0]&&own[0].strctCdNm)||t.strctCdNm||'-'],['사용승인일',fmtDay(t.useAprDay)],
+    ['전유면적㎡',ho?n2(sOwn):'호 미입력'],['공용면적㎡',ho?n2(sPub):'호 미입력'],['합계면적㎡',ho?n2(sOwn+sPub):'호 미입력'],['대지면적㎡',t.platArea?n2(t.platArea):'-'],
+    ['개별공시지가 원/㎡',lpv?(+lpv).toLocaleString('ko-KR')+(lp.stdrYear?' ('+lp.stdrYear+')':''):'-'],['주택공시가격 원',apv?(+apv).toLocaleString('ko-KR'):'-']];
+  $('out').innerHTML='<div class="sum" id="summary">'+sum.map(([a,b])=>'<div><b>'+esc(a)+'</b><span>'+esc(b)+'</span></div>').join('')+'</div>'
+    +'<p class="note">대지권 비율은 건축물대장에 없습니다(등기부 확인). 오피스텔·상업용 건물의 국세청 일괄고시 가격은 홈택스에서 확인합니다.</p>'
+    +'<h2>표제부</h2>'+table(r.title,['dongNm','mainPurpsCdNm','etcPurps','strctCdNm','etcStrct','grndFlrCnt','ugrndFlrCnt','platArea','archArea','totArea','useAprDay','pmsDay','hhldCnt','hoCnt','regstrKindCdNm'],'tbl-title')
+    +'<h2>총괄표제부</h2>'+table(r.recap,['bldNm','mainPurpsCdNm','platArea','totArea','bcRat','vlRat','useAprDay','hhldCnt','hoCnt'],'tbl-recap')
+    +'<h2>전유·공용면적'+(ho?' ('+esc(dong?dong+'동 ':'')+esc(ho)+'호)':' (전체)')+'</h2>'+table(ex.slice(0,300),['dongNm','hoNm','flrNoNm','exposPubuseGbCdNm','mainPurpsCdNm','etcPurps','strctCdNm','area'],'tbl-expos')
+    +'<h2>개별공시지가</h2>'+table(r.land,Object.keys(r.land[0]||{}),'tbl-land')
+    +'<h2>주택공시가격</h2>'+table(r.apt.concat(r.house),Object.keys((r.apt[0]||r.house[0])||{}),'tbl-house')
+    +raw('표제부',r.title)+raw('전유공용(필터 후)',ex)+raw('공시지가',r.land);
+}
+
+async function start(fn){$('status').innerHTML='';$('out').innerHTML='';$('go').disabled=true;try{await fn()}catch(e){log(e.message,'warn')}finally{$('go').disabled=false}}
+$('f').addEventListener('submit',e=>{e.preventDefault();const q=$('q').value.trim();if(!q){log('주소를 입력하세요.','warn');return}
+  start(async()=>{const{pnu,label}=await resolvePnu(q);await run(pnu,label)})});
+$('goManual').addEventListener('click',()=>start(async()=>{const b=digits($('bjd').value);if(b.length!==10)throw new Error('법정동코드는 10자리입니다.');
+  const pnu=b+($('san').value.trim()?'2':'1')+digits($('bun').value).padStart(4,'0')+digits($('ji').value||'0').padStart(4,'0');await run(pnu,'직접 입력')}));
+}
+</script>
+</body>
+</html>
